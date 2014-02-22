@@ -1,0 +1,77 @@
+
+Changes from Black Rock Studio
+------------------------------
+
+Agent-side checkout changes:
+
+* An accurev timelocked stream is created along with a workspace in order to enforce update to a specific Accurev transaction
+
+* accurev populate is called to fill in any missing files (e.g. after a clean by Teamcity or a manual clean)
+
+* accurev stat -n is called after update/populate to advance the Accurev Scan Time threshold and make subsequent updates faster
+
+* Verbosity of reporting can be selected (none, accurev commands, accurev commands and their output)
+
+* Optionally, an Accurev Repository Tree can be created instead of a Workspace.
+  This may be faster than using a Workspace, but we have to do further testing to confirm this.
+
+* Overlaps in the target stream are detected and reported on, with an optional Build failure if an overlap is found
+
+* The Accurev plugin can enforce a clean out and repopulate of the chosen subdirectory if the system property vcs.accurev.clean is set to 1
+  This can be used to trigger a repopulate from a Custom Build UI or programatically from a build Trigger.
+  A faster population technique is used in this case - accurev update -9 is called and all the files are written by an accurev populate.
+
+
+
+Minor bugfix:
+  If the 'populate stream' is not specified the plugin would not work before. Now it uses the 'watch stream' for population if
+  The populate stream is not specified, as the documentation suggested.
+
+
+
+
+
+
+
+
+Previous Changes
+----------------
+
+
+General Change:
+	The plugin source is now configured to work with Eclipse Java editor. It can still be compiled without eclipse.
+
+Changes in AccuRevVcsSupport:
+	changed Method isAgentSideCheckoutAvailable() to report true.
+	added extra checks in Method getVcsPropertiesProcessor() to validate new HTML fields.
+	added extra code in getDefaultVcsProperties() to alter the default accurev install directory depending on the Operating system and Os bit version(64bit,32bit)
+	
+Changes AccuRevAgentSideVcsSupport:
+	Implemented the updateSources() method.
+	The method will report status messages to the TeamCity server when it starts checking out a stream.
+
+Changes in AcRunProcess:
+	both doExecute methods now returns the return code of the command they execute. They still throw VcsExceptions of Major errors.
+	ThrowIfError now returns the return code of the command if no error was detected.
+	
+	Reason for change:
+		sometimes a command may return a return code of 1 but we dont want to throw an exception.
+	
+Changes In accurevSetting.jsp:
+	Renamed stream field to watchstream
+	Introduced the populatestream field
+	Introduced the subdirectory field
+
+    Reason for change:
+	The Watch Stream is the stream that is monitored for changes but may not be the stream that is checked out.
+	This may occur if you wish to check out a filter stream when the parent stream has changed. The watch stream must be specified
+
+	The populate Stream is The stream that will be checked out when the build begins. 
+	If a populate stream is not specified then the Watch stream will be checked out instead
+
+	the Checkout Subdirectory is the subdirectory that the populate_stream/watch_stream will be populated to.
+	You can specify a different checkout subdirectory for each stream that you intend to check out.
+	TeamCity offers a similar facility but that facility is limited in three ways:
+		It stops using the HASH_CODE if you specify a sub directory (there are ways around this, but they are a bit of hassle). 
+		You have to copy the check out directory to every project that uses the VCS node, where as in out setup we always want certain VCS nodes to checkout to a specific directory.
+		You can only specify one subdirectory per TeamCity project so all your checked out streams will end up in the same directory. Once again this is possible by using check out rules, but these are specific to a project, so you have to copy them for each project.

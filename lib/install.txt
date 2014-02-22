@@ -1,0 +1,4 @@
+
+To install this JAR in your local repository, run the follwing maven command:
+
+mvn install:install-file -Dfile=lib\AccuRevCommon.jar -DgroupId=com.accurev.common -DartifactId=AccuRevCommon.jar -Dversion=4.5.4 -Dpackaging=jar
