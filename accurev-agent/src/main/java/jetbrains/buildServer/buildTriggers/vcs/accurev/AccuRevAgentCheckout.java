@@ -7,7 +7,7 @@ import java.util.List;
 
 import jetbrains.buildServer.agent.AgentRunningBuild;
 import jetbrains.buildServer.agent.BuildProgressLogger;
-import jetbrains.buildServer.buildTriggers.vcs.accurev.command.AcRunProcess;
+import jetbrains.buildServer.buildTriggers.vcs.accurev.command.AcRunProcessExe;
 import jetbrains.buildServer.buildTriggers.vcs.accurev.command.AcSpecialLogin;
 import jetbrains.buildServer.vcs.VcsException;
 import jetbrains.buildServer.vcs.VcsRoot;
@@ -37,7 +37,7 @@ public class AccuRevAgentCheckout
 		mSettings = new Settings(workingDir, vcsRoot);
 		mSettings.setWorkingDir(mWorkingDir);
 		
-        mRunProcess = AcRunProcess.getInstance(mSettings, mWorkingDir);
+        mRunProcess = (AcRunProcessExe) AcRunProcessExe.getInstance(mSettings, mWorkingDir);
 
         // Find some names for later use
         mDepotName = vcsRoot.getProperty(Constants.DEPOT);
@@ -366,7 +366,7 @@ public class AccuRevAgentCheckout
 	private String mCheckoutDir;
 	
 	private Settings mSettings;
-	private AcRunProcess mRunProcess;
+	private AcRunProcessExe mRunProcess;
 
     private String mDepotName;
     private String mParentStreamName;            

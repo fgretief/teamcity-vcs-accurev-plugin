@@ -14,6 +14,7 @@ import jetbrains.buildServer.serverSide.BuildServerAdapter;
 import jetbrains.buildServer.serverSide.SRunningBuild;
 import jetbrains.buildServer.serverSide.BuildRevision;
 import jetbrains.buildServer.buildTriggers.vcs.accurev.command.AcRunProcess;
+import jetbrains.buildServer.buildTriggers.vcs.accurev.command.AcRunProcessExe;
 import jetbrains.buildServer.messages.Status;
 import jetbrains.buildServer.vcs.VcsException;
 import jetbrains.buildServer.messages.DefaultMessagesInfo;
@@ -85,7 +86,7 @@ public class AccurevPromoter extends BuildServerAdapter
 	{
 
 		Settings settings = new Settings(null, vcsNode);
-		AcRunProcess cmd  = AcRunProcess.getInstance(settings, null); 
+		AcRunProcessExe cmd  = (AcRunProcessExe)AcRunProcessExe.getInstance(settings, null); // FIXME: update interface 
 		cmd.setErrMessagesList(errMessages);
 		
 		String streamName = settings.getWatchStream();
