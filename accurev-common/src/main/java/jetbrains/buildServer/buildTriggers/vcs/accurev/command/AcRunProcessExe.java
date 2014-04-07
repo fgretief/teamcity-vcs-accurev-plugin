@@ -15,9 +15,13 @@
  */
 package jetbrains.buildServer.buildTriggers.vcs.accurev.command;
 
+import java.io.BufferedReader;
 import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.FileReader;
 import java.io.IOException;
 import java.io.ByteArrayInputStream;
+import java.util.Hashtable;
 import java.util.Vector;
 import java.util.List;
 
@@ -45,6 +49,15 @@ import javax.xml.parsers.DocumentBuilder;
  */
 public class AcRunProcessExe extends RunProcess implements AcRunProcess
 {
+	public class AcHistoryParser extends HistoryParser 
+	{
+		@SuppressWarnings("rawtypes")
+		public Hashtable getStreamCollection()
+		{
+			return streamCollection;
+		}
+	}
+	
 	private File workingDir;
 	private List<String> errMessages;
 	final private  String commandPrefix = "RUN COMMAND:"; 
@@ -59,26 +72,33 @@ public class AcRunProcessExe extends RunProcess implements AcRunProcess
 	{
 		this.errMessages = errMessages;
 	}
-	
+
 	public static AcRunProcess getInstance(Settings settings, File workingDirectory) throws VcsException
 	{
 		RunProcess.setAccuRevExecutable(settings.getExecutablePath().getAbsolutePath());
+
+		AcRunProcess cmd = new AcRunProcessExe(workingDirectory);
+		
 		AcSecurityProcess sec = new AcSecurityProcess();
-		sec.setSessionToken(new SessionToken(settings.getServerName() + ":" + settings.getServerPort(), "", settings.getUsername()));
-    	String token = "";
-    	if (sec.getSecurityInfo().startsWith(sec.NotAuthenticated))
-        	token = sec.Login(settings.getUsername(), settings.getPassword());
-    	AcRunProcess cmd = new AcRunProcessExe(workingDirectory);
-    	cmd.setSessionToken(new SessionToken(settings.getServerName() + ":" + settings.getServerPort(), token, settings.getUsername()));
+		int[] ver = sec.getAccuRevServerVersion();
+		
+		if ((ver[0] == 4 && ver[1] >= 7) || (ver[0] > 4)) 
+		{
+			String token = "";
+	    	if (sec.getSecurityInfo().startsWith(sec.NotAuthenticated))
+	        	token = sec.Login(settings.getUsername(), settings.getPassword());
+			
+	    	cmd.setSessionToken(new SessionToken(settings.getServerName() + ":" + settings.getServerPort(), token, settings.getUsername()));
+		}
 
 		return cmd;
-	}	
-	
+	}
+
 	public SessionToken getSessionToken()
 	{
 		return sessionToken;
 	}
-		
+
 	// TODO: this is the code to format an AccuRev date
     // /** Date format for AccuRev. */
     //private static final String ACCUREV_DATE_FORMAT = "yyyy/MM/dd HH:mm:ss";
@@ -290,6 +310,29 @@ public class AcRunProcessExe extends RunProcess implements AcRunProcess
 		return hist.getHistoryDataCollection();
 	}
 	
+	public AcHistoryParser getHistoryBetween(@NotNull String depot, @NotNull String stream, String fromVer, String toVer) 
+			throws VcsException
+	{
+		String[] args = {
+				RunProcess.getAccuRevExecutable(),
+				"hist",
+				"-fvx",
+				"-t", toVer + "-" + fromVer,
+				"-k", "promote",
+				"-p", depot,
+				"-s", stream,
+		};
+		String command  = commandPrefix + "accurev hist -fvx -t" + toVer + "-" + fromVer + " -k promote -p " + depot + " -s " + stream;
+		printBuildMessage(command);
+		
+		AcHistoryParser hist = new AcHistoryParser();
+		int returnCode = doExecute("accurev hist", args, hist);
+		
+		printResultMessages(returnCode);		
+		return hist;
+	}
+	
+	
 	public GenericXMLParser getAsXMLRevisionsBetween(@NotNull String depot, @NotNull String stream, String fromVer, String toVer) throws VcsException
 	{
 		String[] args = {
@@ -302,7 +345,7 @@ public class AcRunProcessExe extends RunProcess implements AcRunProcess
 				"-s", stream,
 		};
 		
-		String command = "accurev hist -fvx -t" + toVer + "-" + fromVer + " -k promote -p " + depot + " -s " + stream;
+		String command = commandPrefix + "accurev hist -fvx -t" + toVer + "-" + fromVer + " -k promote -p " + depot + " -s " + stream;
 		printBuildMessage(command);
 		
 		GenericXMLParser parser = new GenericXMLParser();
@@ -311,23 +354,42 @@ public class AcRunProcessExe extends RunProcess implements AcRunProcess
 		printResultMessages(returnCode);		
 		return parser;
 }
-		
+
 	public String getLastTransactionId(@NotNull String depot)
-		throws VcsException
+		throws VcsException 
 	{
-        String[] args = {
+		String[] args = {
 				RunProcess.getAccuRevExecutable(),
 				"hist",
 				"-fx",
 				"-t", "now.1",
 				"-p", depot,
 		};
-        
-        GenericXMLParser parser = new GenericXMLParser();       
+/* for Debugging only
+        Loggers.VCS.info("[XX] getLastTransactionId: depot: '"+depot);
+        File f = new File("W:/TeamCity/aclogs/ac_last_trx_" + depot + ".txt");
+        if (f.exists())
+        { 
+        	try {
+            	BufferedReader bufferedReader = new BufferedReader(new FileReader(f));
+        		try {
+	        		// read only the first line of the file
+					String result = bufferedReader.readLine();
+	            	Loggers.VCS.info("[XX] getLastTransactionId:  version "+ result);
+	            	return result;
+            	} finally {
+            		bufferedReader.close();
+        		}
+        	} catch (FileNotFoundException ex) {
+        	} catch (IOException e) {
+			}
+        }
+ */
+        GenericXMLParser parser = new GenericXMLParser();
         String command = commandPrefix + "accurev hist -fx -t now.1 -p " + depot;
         printBuildMessage(command);
         
-        int returnCode = doExecute("accurev hist", args, parser);        
+        int returnCode = doExecute("accurev hist", args, parser);
         printResultMessages(returnCode);
         
         XMLTag xTag = (XMLTag)parser.getTagList().get(0);
@@ -342,13 +404,40 @@ public class AcRunProcessExe extends RunProcess implements AcRunProcess
             Document DocToParse = DocBuilder.parse(ssInput);
             DocToParse.getElementsByTagName("transaction").item(0);
             Element iTxn = (Element) DocToParse.getElementsByTagName("transaction").item(0);
-			return iTxn.getAttribute("id");
+            return iTxn.getAttribute("id");
         }
         catch (Exception ex)
         {
             throw new VcsException("Unable to parse response document whilst obtaining latest TXNID: " + ex.getMessage() + "\nResponse Data: " + ssInput);
         }
-	}
+    }
+
+    public String getDirectAncestor(String verId, String filePath)
+    	throws VcsException
+    {
+		String[] args = {
+				RunProcess.getAccuRevExecutable(),
+				"anc",
+				"-fx",
+				"-v", verId,
+				filePath,
+		};
+
+		String command = commandPrefix + "accurev anc -fx -v "+ verId +" "+ filePath;
+		printBuildMessage(command);
+
+        GenericXMLParser parser = new GenericXMLParser();
+        int returnCode = doExecute("accurev anc", args, parser);
+		printResultMessages(returnCode);
+		
+		XMLTag acResponse = (XMLTag)parser.getTagList().get(0);
+		assert acResponse.getName().equals("acResponse");
+		
+		XMLTag element = acResponse.getTag("element");
+		String streamId = element.getAttributeValue("stream");
+		String ancVerId = element.getAttributeValue("version");
+		return streamId +"/"+ ancVerId;		 
+    }	
 
 	@SuppressWarnings("unchecked")
 	public List<XMLTag> getUpdateStreamInfo(String depot, String stream, String highTx, String lowTx)
@@ -460,8 +549,6 @@ public class AcRunProcessExe extends RunProcess implements AcRunProcess
         XMLTag xTag = (XMLTag)parser.getTagList().get(0);
         String sInput = xTag.toXML();
         
-   
-
         /* TODO 25SEP09 DCN - AccuRev CLI is returning unescaped characters in XML response. There could be others so need to investigate this further */
         sInput = sInput.replaceAll("&", "&amp;");
 
@@ -873,7 +960,7 @@ public class AcRunProcessExe extends RunProcess implements AcRunProcess
     }
     
     public void populateWorkspaceClean(File checkoutDir)
-	throws VcsException
+    		throws VcsException
 	{
 		String[] args = {
 				RunProcess.getAccuRevExecutable(),

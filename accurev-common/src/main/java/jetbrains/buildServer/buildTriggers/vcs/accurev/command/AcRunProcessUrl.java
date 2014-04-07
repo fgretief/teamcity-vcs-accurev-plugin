@@ -1,25 +1,33 @@
 package jetbrains.buildServer.buildTriggers.vcs.accurev.command;
 
 import java.io.BufferedReader;
+import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.io.StringReader;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.List;
 import java.util.Vector;
 
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.parsers.ParserConfigurationException;
+import javax.xml.parsers.SAXParser;
+import javax.xml.parsers.SAXParserFactory;
 
 import org.jetbrains.annotations.NotNull;
 import org.w3c.dom.Document;
+import org.xml.sax.InputSource;
 import org.xml.sax.SAXException;
 
 import com.accurev.common.data.ElementStatusData;
 import com.accurev.common.data.SessionToken;
 import com.accurev.common.data.TransactionData;
 import com.accurev.common.data.XMLTag;
+import com.accurev.common.parsers.HistoryParser;
 
 import jetbrains.buildServer.buildTriggers.vcs.accurev.Settings;
 import jetbrains.buildServer.log.Loggers;
@@ -38,25 +46,17 @@ public class AcRunProcessUrl implements AcRunProcess
 		return result;
 	}
 	
-	public SessionToken getSessionToken() {
-		throw new UnsupportedOperationException();
-	}
-	
-	public void setSessionToken(SessionToken sessionToken) {
-		/* do nothing */
-	}
-			
-	public String getLastTransactionId(@NotNull String depot)
-			throws VcsException
+	private String fetchFromUrl(String urlText)
 	{
-    	try {
-    		URL url = new URL("http://localhost:8055/accurev/lastTransactionId?depot="+depot);
-    		HttpURLConnection connection = (HttpURLConnection) url.openConnection(); 
+		try 
+		{
+			URL url = new URL(urlText);
+			HttpURLConnection connection = (HttpURLConnection) url.openConnection();
 
     		connection.setRequestMethod("GET"); 
             connection.setRequestProperty("Content-Type", "application/xml");
-            
-            Loggers.VCS.info("[XX] fetching data from URL: lastTransactionId");
+
+            Loggers.VCS.info("[XX] fetching data from URL: " + urlText);
             
             InputStream content = (InputStream) connection.getInputStream();
             BufferedReader in = new BufferedReader(new InputStreamReader(content));
@@ -76,22 +76,70 @@ public class AcRunProcessUrl implements AcRunProcess
             return data;
 
     	} catch (Exception e) {
-    		Loggers.VCS.error(String.format("getLastTransactionId: exception '%s'", e.getMessage()), e);
+    		Loggers.VCS.error(String.format("Unable to fetch from URL: exception '%s'", e.getMessage()), e);
     		return null;
     	}  		
+	}
+	
+	public SessionToken getSessionToken() {
+		throw new UnsupportedOperationException();
+	}
+	
+	public void setSessionToken(SessionToken sessionToken) {
+		/* do nothing */
+	}
+			
+	public String getLastTransactionId(@NotNull String depot)
+			throws VcsException
+	{
+		return fetchFromUrl("http://localhost:8055/accurev/lastTransactionId?depot="+depot);
 	}
 	
     public Document getListOfChangedElements(@NotNull String stream, String fromVer, String toVer)
             throws VcsException , ParserConfigurationException, SAXException, IOException
     {
-    	throw new UnsupportedOperationException();
+    	String xmlData = fetchFromUrl("http://localhost:8055/accurev/getListOfChangedElements?stream="+stream+"&from="+fromVer+"&to="+toVer);
+    	
+        /* NOTE: 25SEP09 DCN
+         *   AccuRev CLI is returning unescaped characters in XML response. 
+         *   There could be others so need to investigate this further. 
+         */
+    	xmlData = xmlData.replaceAll("&", "&amp;");
+    	
+        ByteArrayInputStream ssInput = new ByteArrayInputStream(xmlData.getBytes());
+        DocumentBuilderFactory DocFactory = DocumentBuilderFactory.newInstance();
+        DocumentBuilder DocBuilder = DocFactory.newDocumentBuilder();
+        Document DocToParse = DocBuilder.parse(ssInput);
+        return DocToParse;    	
     }
     
+    @SuppressWarnings("unchecked")
     public Vector<TransactionData> getRevisionsBetween(@NotNull String depot, @NotNull String stream, String fromVer, String toVer) 
     		throws VcsException
     {
-    	throw new UnsupportedOperationException();
+    	String responseStr = fetchFromUrl("http://localhost:8055/accurev/getRevisionsBetween?depot="+depot+"&stream="+stream+"&from="+fromVer+"&to="+toVer);
+    	
+    	try 
+    	{
+			if (responseStr.length() > 0) {
+				
+				HistoryParser histParser = new HistoryParser();
+				SAXParser parser = SAXParserFactory.newInstance().newSAXParser();				
+				parser.parse(new InputSource(new StringReader(responseStr)), histParser);				
+				return histParser.getHistoryDataCollection();
+			}		
+    	} catch (ParserConfigurationException e) {
+    	} catch (SAXException e) {
+    	} catch (IOException e) {        
+    	}
+    	
+    	return null;
     }
+    
+    public String getParentStreamName(String depot, String stream) throws VcsException
+    {
+    	return fetchFromUrl("http://localhost:8055/accurev/getParentStreamName?depot="+depot+"&stream="+stream);
+    }    
     
     public boolean doesStreamExist(String depot, String stream) throws VcsException
     {
@@ -133,5 +181,19 @@ public class AcRunProcessUrl implements AcRunProcess
 	{	
     	throw new UnsupportedOperationException();
 	}
+	
+    public String getDirectAncestor(String verId, String filePath)
+        	throws VcsException
+    {	
+    	throw new UnsupportedOperationException();
+	}
+
+
+	public HistoryParser getHistoryBetween(@NotNull String depot, @NotNull String stream, String fromVer, String toVer) 
+			throws VcsException    
+    {	
+    	throw new UnsupportedOperationException();
+	}
     
 }
+

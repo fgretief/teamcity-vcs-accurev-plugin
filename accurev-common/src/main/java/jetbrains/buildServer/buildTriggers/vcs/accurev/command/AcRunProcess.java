@@ -14,6 +14,7 @@ import com.accurev.common.data.ElementStatusData;
 import com.accurev.common.data.SessionToken;
 import com.accurev.common.data.TransactionData;
 import com.accurev.common.data.XMLTag;
+import com.accurev.common.parsers.HistoryParser;
 
 import jetbrains.buildServer.vcs.VcsException;
 
@@ -31,25 +32,34 @@ public interface AcRunProcess {
     public Vector<TransactionData> getRevisionsBetween(@NotNull String depot, @NotNull String stream, String fromVer, String toVer) 
     		throws VcsException;
     
-    public boolean doesStreamExist(String depot, String stream) 
+    public String getParentStreamName(@NotNull String depot, @NotNull String stream) 
     		throws VcsException;
     
-    public boolean isPassThroughStream(String depot, String stream) 
+    public boolean doesStreamExist(@NotNull String depot, @NotNull String stream) 
+    		throws VcsException;
+    
+    public boolean isPassThroughStream(@NotNull String depot, @NotNull String stream) 
     		throws VcsException;
     
 	public void createSnapshot(String snapshotName, String backingStreamName, String timeSpec) 
 			throws VcsException;
 	
-	public List<XMLTag> getUpdateStreamInfo(String depot, String stream, String highTx, String lowTx)
+	public List<XMLTag> getUpdateStreamInfo(@NotNull String depot, @NotNull String stream, String highTx, String lowTx)
 			throws VcsException;
 	
     public void populateStream(@NotNull String depot, @NotNull String stream, @NotNull String location)
         	throws VcsException;
     
-    public XMLTag accurevShow(String depot, String stream) 
+    public XMLTag accurevShow(@NotNull String depot, @NotNull String stream) 
     		throws VcsException;
     
-	public ElementStatusData getElementInfo(String depot, String stream, String element) 
+	public ElementStatusData getElementInfo(@NotNull String depot, @NotNull String stream, String element) 
+			throws VcsException;
+	
+    public String getDirectAncestor(String verId, String filePath)
+        	throws VcsException;
+
+	public HistoryParser getHistoryBetween(@NotNull String depot, @NotNull String stream, String fromVer, String toVer) 
 			throws VcsException;
     
 }

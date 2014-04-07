@@ -15,9 +15,9 @@
  */
 package jetbrains.buildServer.buildTriggers.vcs.accurev.command;
 
+import com.accurev.common.data.SessionToken;
 import com.accurev.common.process.CatProcess;
 import com.accurev.common.process.RunProcess;
-
 import com.intellij.execution.configurations.GeneralCommandLine;
 
 import java.io.File;
@@ -25,6 +25,7 @@ import java.io.FileWriter;
 import java.io.IOException;
 
 import jetbrains.buildServer.ExecResult;
+import jetbrains.buildServer.buildTriggers.vcs.accurev.Settings;
 import jetbrains.buildServer.vcs.VcsException;
 
 /**
@@ -36,6 +37,29 @@ public class AcCatProcess extends CatProcess
     {
         enableDebug = true; // for testing
     }
+
+	public static AcCatProcess getInstance(Settings settings) throws VcsException
+	{
+		RunProcess.setAccuRevExecutable(settings.getExecutablePath().getAbsolutePath());
+
+		AcCatProcess cmd = new AcCatProcess();
+/*
+		AcSecurityProcess sec = new AcSecurityProcess();
+		int[] ver = sec.getAccuRevServerVersion();
+		if ((ver[0] == 4 && ver[1] >= 7) || (ver[0] > 4))
+		{
+			String token = "";
+			if (sec.getSecurityInfo().startsWith(sec.NotAuthenticated))
+				token = sec.Login(settings.getUsername(), settings.getPassword());
+			
+			cmd.setSessionToken(new SessionToken(settings.getServerName() + ":" + settings.getServerPort(), token, settings.getUsername()));
+		}
+		else
+ */
+			cmd.setSessionToken(null);
+	
+		return cmd;
+	}
 
     private GeneralCommandLine createCommandLine(String depotName, String streamNameVersion, File workingDir)
     {
