@@ -51,6 +51,7 @@ import java.net.URL;
 import java.util.*;
 
 import com.accurev.common.data.*;
+import com.accurev.common.parsers.HistoryParser;
 import com.accurev.common.process.*;
 import com.accurev.common.utils.*;
 
@@ -67,23 +68,18 @@ import javax.xml.xpath.XPathFactory;
  */
 @SuppressWarnings("deprecation")
 public class AccuRevVcsSupport 
-	extends 
-		VcsSupport 
-	implements  
-		AgentSideCheckoutAbility, 
-		LabelingSupport, 
-		CurrentVersionIsExpensiveVcsSupport
- /*
-public class AccuRevVcsSupport extends ServerVcsSupport 
-	implements  BuildPatchByCheckoutRules,
-				TestConnectionSupport,
-				LabelingSupport, 
-				VcsPersonalSupport,
-				IncludeRuleBasedMappingProvider
- */
+	extends
+		ServerVcsSupport
+	implements
+		VcsSupportConfig,
+		AgentSideCheckoutAbility,
+		LabelingSupport,
+		CurrentVersionIsExpensiveVcsSupport,
+		CollectSingleStateChangesByCheckoutRules,
+		BuildPatchByCheckoutRules,
+		VcsFileContentProvider,
+		TestConnectionSupport
 {
-	//private static final Logger LOG = Logger.getInstance(AccuRevVcsSupport.class.getName());
-	
 	//private VcsManager acVcsManager;
 	private File acDefaultWorkFolderParent;
 
@@ -98,6 +94,28 @@ public class AccuRevVcsSupport extends ServerVcsSupport
 		
 		AccurevPromoter promoter = new AccurevPromoter();
 		eventDispatcher.addListener(promoter);
+	}
+	
+	@NotNull
+	public VcsFileContentProvider getContentProvider() 
+	{
+		return this;
+	}
+
+	@NotNull
+	public CollectChangesPolicy getCollectChangesPolicy() 
+	{
+		return this;
+	}
+	
+	@NotNull
+	public BuildPatchByCheckoutRules getBuildPatchPolicy() 
+	{
+		return this;
+	}
+	
+	public TestConnectionSupport getTestConnectionSupport() {
+		return ((isTestConnectionSupported()) ? this : null);
 	}
 	
 	private Settings createSettings(final VcsRoot root) throws VcsException
@@ -286,10 +304,7 @@ public class AccuRevVcsSupport extends ServerVcsSupport
         // TODO DCN 18SEP09 Not exactly sure what we're supposed to return here, given that we're not supposed to implement this with "expensive" mode.
     	Settings settings = createSettings(root);
     	
-    	/*
-    	IAcRunProcess cmd = AcRunProcess.getInstance(settings, acDefaultWorkFolderParent);
-    	*/
-    	AcRunProcess cmd = AcRunProcessUrl.getInstance(settings, acDefaultWorkFolderParent);
+    	AcRunProcess cmd = AcRunProcessExe.getInstance(settings, acDefaultWorkFolderParent);
     	
     	return cmd.getLastTransactionId(settings.getDepot());
     }
@@ -339,7 +354,7 @@ public class AccuRevVcsSupport extends ServerVcsSupport
 
     public String label(@NotNull String label, @NotNull String version, @NotNull VcsRoot root, @NotNull CheckoutRules checkoutRules) throws VcsException
     {
-    	Loggers.VCS.debug("label stream: '" + label + "', " + version);
+    	Loggers.VCS.info("label stream: '" + label + "', " + version);
     	Settings settings = createSettings(root);
     	String snapshotName = fixSnapshotName(label);
     	AcRunProcess cmd = AcRunProcessExe.getInstance(settings, acDefaultWorkFolderParent);
@@ -352,17 +367,15 @@ public class AccuRevVcsSupport extends ServerVcsSupport
     	return this;
     }
 
-    @Override
     public boolean ignoreServerCachesFor(VcsRoot root)
     {
-    	return super.ignoreServerCachesFor(root);
+    	return false;
     }
 
-    @Override
     public boolean sourcesUpdatePossibleIfChangesNotFound(VcsRoot root)
     {
-    	boolean base = super.sourcesUpdatePossibleIfChangesNotFound(root);
-    	Loggers.VCS.debug("sourcesUpdatePossibleIfChangesNotFound: value = " + base);
+    	boolean base = true; //super.sourcesUpdatePossibleIfChangesNotFound(root);
+    	Loggers.VCS.info("sourcesUpdatePossibleIfChangesNotFound: value = " + base);
     	return true;
     }
 
@@ -385,9 +398,9 @@ public class AccuRevVcsSupport extends ServerVcsSupport
     public String testConnection(final VcsRoot vcsRoot) throws VcsException
     {
     	Settings settings = createSettings(vcsRoot);
-/*
+
     	String cmdPath = "";
-		cmdPath = settings.getExecutablePath().getAbsolutePath();
+    	cmdPath = settings.getExecutablePath().getAbsolutePath();
 		
         int status = RunProcess.checkAccuRevExecutable(cmdPath);
         if (status != RunProcess.ERR_SUCCESS)
@@ -399,18 +412,19 @@ public class AccuRevVcsSupport extends ServerVcsSupport
         	Loggers.VCS.warn(message);
             throw new VcsException(message);
         }
-			
 
         RunProcess.setAccuRevExecutable(cmdPath);
-        Loggers.VCS.debug("Executable: " + RunProcess.getAccuRevExecutable());
-
-        AcSecurityProcess sec = new AcSecurityProcess();//DON'T REPLACE WITH AcRunProcess.getInstance(). This is a special method.
+        Loggers.VCS.info("Executable: " + RunProcess.getAccuRevExecutable());
+        
+        AcSecurityProcess sec = new AcSecurityProcess();
+        /*
+        //DON'T REPLACE WITH AcRunProcess.getInstance(). This is a special method.
         sec.setSessionToken(new SessionToken(settings.getServerName() + ":" + settings.getServerPort(), "", settings.getUsername()));
       
         sec.Logout(); // Ensure we are logged out, to verify login details
         String token = sec.Login(settings.getUsername(), settings.getPassword());
         sec.setSessionToken(new SessionToken(settings.getServerName() + ":" + settings.getServerPort(), token, settings.getUsername()));
-
+		*/
         int[] ver = sec.getAccuRevServerVersion();
         StringBuilder vb = new StringBuilder();
         for (int i = 0; i < ver.length; ++i)
@@ -418,15 +432,17 @@ public class AccuRevVcsSupport extends ServerVcsSupport
         	if (i > 0) vb.append(".");
         	vb.append(ver[i]);
         }
+/*        
         if ((ver[0] == 4 && ver[1] < 7) || (ver[0] < 4))
         {
         	final String message = "AccuRev Server should be at least v4.7.0 or later, but found v" + vb.toString();
         	throw new VcsException(message);
         }
-        Loggers.VCS.debug("AccuRev Server version: " + vb.toString());
+ */        
+        Loggers.VCS.info("AccuRev Server version: " + vb.toString());
 
-		AcRunProcess cmd = new AcRunProcess(acDefaultWorkFolderParent);
-		cmd.setSessionToken(new SessionToken(settings.getServerName() + ":" + settings.getServerPort(), token, settings.getUsername()));
+		AcRunProcess cmd = new AcRunProcessExe(acDefaultWorkFolderParent);
+		//cmd.setSessionToken(new SessionToken(settings.getServerName() + ":" + settings.getServerPort(), token, settings.getUsername()));
 		if (!cmd.doesStreamExist(settings.getDepot(), settings.getWatchStream()))
 		{
 			throw new VcsException("Stream cannot be found.");
@@ -435,74 +451,73 @@ public class AccuRevVcsSupport extends ServerVcsSupport
 		{
 			throw new VcsException("The specified watch stream is a passthrough stream. This is not allowed");
 		}
-*/		
+		
         System.out.printf("Test Succes: %s\n", settings.getWatchStream());
 		return null; // test connection success
     }
 
+	public List<ModificationData> collectChanges(@NotNull VcsRoot root,
+			@NotNull String fromVersion, 
+			@Nullable String currentVersion,
+			@NotNull CheckoutRules checkoutRules) throws VcsException {
+		assert ((currentVersion != null) || (isCurrentVersionExpensive()));
+		return ((currentVersion != null) 
+				? collectBuildChanges(root, fromVersion, currentVersion, checkoutRules)
+				: ((CurrentVersionIsExpensiveVcsSupport) this).collectBuildChanges(root, fromVersion, checkoutRules));
+	}
+
     public List<ModificationData> collectBuildChanges(final VcsRoot root,
-                                                    @NotNull final String fromVersion,
-                                                    @NotNull final String toVersion,
-                                                    final CheckoutRules checkoutRules) throws VcsException
-    {
-    	System.out.println("[XX] collectBuildChanges1");
-    	Loggers.VCS.info("[XX] collectBuildChanges1");
-    	
-    	
-    	return null; //VcsSupportUtil.collectBuildChanges(root, fromVersion, toVersion, checkoutRules, this);
-    }
-    
-   /* public List<ModificationData> collectBuildChanges(final VcsRoot root,
-    		                                          @NotNull final String fromVersion,
-    		                                          @NotNull final String toVersion,
-    		                                          final IncludeRule includeRule) throws VcsException
-    {
-        return null;
-    }*/
-    public List<ModificationData> collectBuildChanges(final VcsRoot root,
-    		                                          @NotNull final String fromVersion,
+    		                                          @NotNull String fromVersion,
     		                                          final CheckoutRules checkoutRules) throws VcsException
     {
-
-        /* TODO 25SEP09 DCN - Had to remove include rules due to issues experienced with multi-VCS roots. Not sure how to resolve just yet */
-    	//Loggers.VCS.debug("collectBuildChanges: includeRule = " + includeRule);
-    	//Loggers.VCS.debug("collectBuildChanges: includeRule.getFrom() = " + includeRule.getFrom());
-
     	Settings settings = createSettings(root);
-    	List<ModificationData> result = new ArrayList<ModificationData>();
-    	
-    	System.out.println("[XX] collectBuildChanges");
-    	Loggers.VCS.info("[XX] collectBuildChanges");
-    	
-        //IAcRunProcess run = AcRunProcessExe.getInstance(settings, acDefaultWorkFolderParent);
-        AcRunProcess run = AcRunProcessUrl.getInstance(settings, acDefaultWorkFolderParent);
-                
+
         String depot = settings.getDepot();
-    	String stream = settings.getWatchStream();
+        String stream = settings.getWatchStream();
+        Loggers.VCS.info(String.format("[XX] collectBuildChanges: depot '%s', stream '%s'", depot, stream));
 
+        AcRunProcessExe run = (AcRunProcessExe)AcRunProcessExe.getInstance(settings, acDefaultWorkFolderParent);
         String currentVersion = run.getLastTransactionId(depot);
-        // Testing: display the input values
-        Loggers.VCS.debug("collectBuildChanges: from " + fromVersion + " to " + currentVersion);
+        
+        return collectBuildChanges(root, fromVersion, currentVersion, checkoutRules);
+    }
+    
+    public List<ModificationData> collectBuildChanges(final VcsRoot root,
+            @NotNull final String fromVersion,
+            @NotNull final String currentVersion,
+            final CheckoutRules checkoutRules) throws VcsException
+	{
+        Loggers.VCS.info("[XX] collectBuildChanges: from " + fromVersion + " to " + currentVersion);
+        
+        Settings settings = createSettings(root);
+        String depot = settings.getDepot();
+        String stream = settings.getWatchStream();
+        Loggers.VCS.info(String.format("[XX] collectBuildChanges: depot '%s', stream '%s'", depot, stream));
 
+        List<ModificationData> result = new ArrayList<ModificationData>();
         if (Long.parseLong(fromVersion) == Long.parseLong(currentVersion))
         {
             return result;
         }
+
         try
         {
-            Document xmlChanges = run.getListOfChangedElements(stream, currentVersion, fromVersion);
-            XPathFactory  factory=XPathFactory.newInstance();
-            XPath xPath=factory.newXPath();
-            NodeList nodes = (NodeList) xPath.evaluate("/AcResponse/Element/Change", xmlChanges, XPathConstants.NODESET);
-            Loggers.VCS.debug("Number of changes: " + nodes.getLength()); // Display the string.
+            XPathFactory factory = XPathFactory.newInstance();
+            XPath xPath = factory.newXPath();
 
-            if (nodes.getLength() == 0)
-                return result;
-			
-			// ----------------------
+        	Document xmlChanges = null;
+
+            AcRunProcessExe run = (AcRunProcessExe)AcRunProcessExe.getInstance(settings, acDefaultWorkFolderParent);
+            //AcRunProcess url = AcRunProcessUrl.getInstance(settings, acDefaultWorkFolderParent);
+            //Document xmlChanges = url.getListOfChangedElements(stream, fromVersion, currentVersion);
+            //NodeList nodes = (NodeList) xPath.evaluate("/AcResponse/Element/Change", xmlChanges, XPathConstants.NODESET);
+            //Loggers.VCS.info("Number of changes: " + nodes.getLength()); // Display the string.
+            //if (nodes.getLength() == 0)
+            //    return result;
+
+            // ----------------------
             collectStreamChanges(root, depot, stream, result, xmlChanges, fromVersion, currentVersion, run, xPath);
-			// ----------------------
-            
+            // ----------------------
 
         	if(settings.getHideChanges())
         	{
@@ -531,14 +546,14 @@ public class AccuRevVcsSupport extends ServerVcsSupport
         			
         			ModificationData mod = new ModificationData(changeDate, changes, description, userName, root, txVersion, displayVersion);
         			result.clear();
-        			result.add(mod);     		
+        			result.add(mod);
         			
-        		}       		
+        		}
         		return result;
         	}
             
-            
-            Loggers.VCS.debug("Number of transaction mods: " + result.size()); // Display the string.
+            Loggers.VCS.info("Number of transaction mods: " + result.size()); // Display the string.
+/* 
             NodeList inheritedVersionNodes = (NodeList) xPath.evaluate("/AcResponse/Element/Change[not(@VcsStatus) or @VcsStatus != 'Matched']", xmlChanges, XPathConstants.NODESET);
 
             if (inheritedVersionNodes.getLength() != 0)
@@ -569,9 +584,9 @@ public class AccuRevVcsSupport extends ServerVcsSupport
                     ModificationData mod = new ModificationData(changeDate, changes, description, user, root, txVersion, displayVersion);
                     result.add(mod);
                 }
-                Loggers.VCS.debug("Total number of mods: " + result.size()); // Display the string.
-
+                Loggers.VCS.info("Total number of mods: " + result.size()); // Display the string.
             }
+ */
         }
         catch (Exception ex)
         {
@@ -606,7 +621,7 @@ public class AccuRevVcsSupport extends ServerVcsSupport
     	throws VcsException, FileNotFoundException, IOException
     {
     	// Testing: display input values
-    	Loggers.VCS.debug("buildIncrementalPatch: fromVer = " + fromVer + ", toVer = " + toVer );
+    	Loggers.VCS.info("buildIncrementalPatch: fromVer = " + fromVer + ", toVer = " + toVer );
 
    		assert Long.parseLong(toVer) >= Long.parseLong(fromVer);
 
@@ -692,25 +707,22 @@ public class AccuRevVcsSupport extends ServerVcsSupport
     public void buildFullPatch(final Settings settings, @NotNull final String toVersion, final PatchBuilder builder)
     	throws IOException, VcsException
     {
-    	System.out.println("[XX] buildFullPatch");
-    	Loggers.VCS.info("[XX] buildFullPatch");
-    	
     	File tempDir = FileUtil.createTempDirectory("accurev", toVersion);
     	try 
     	{
-            /*the following section is required for backward compatibility.
-	        * The previous version of this plugin did not have a populateStream variable.
-	        */
-	        String workingStream = "";
+            /* The following section is required for backward compatibility.
+	         * The previous version of this plugin did not have a populateStream variable.
+	         */
+	        String workingStream;
 	        if (settings.getPopulateStream() != null)
 	        {
-	        	workingStream = settings.getPopulateStream();        	
+	        	workingStream = settings.getPopulateStream();
 	        }
 	        else
 	        {
 	        	workingStream = settings.getWatchStream();
-	        }	
-    		
+	        }
+
 			String checkoutDir = tempDir.getAbsolutePath();
 			if (settings.getSubDirectory() != null)
 			{
@@ -723,13 +735,9 @@ public class AccuRevVcsSupport extends ServerVcsSupport
 						throw new VcsException("Unable to create Directory " + checkoutDir);
 					}
 				}
-				
-
 			}
-	        			
-			//AcRunProcess cmd = AcRunProcessExe.getInstance(settings, acDefaultWorkFolderParent);
-    		AcRunProcess cmd = AcRunProcessUrl.getInstance(settings, acDefaultWorkFolderParent);
-    		
+
+			AcRunProcess cmd = AcRunProcessExe.getInstance(settings, acDefaultWorkFolderParent);
     		cmd.populateStream(settings.getDepot(), workingStream,checkoutDir);
     		buildPatchFromDirectory(builder, tempDir, null);
     	} finally {
@@ -738,15 +746,14 @@ public class AccuRevVcsSupport extends ServerVcsSupport
     }
 
     protected void buildPatchFromDirectory(final PatchBuilder builder, final File repRoot, final FileFilter filter)
-    	throws IOException
+        throws IOException
     {
-        //buildPatchFromDirectory(repRoot, builder, repRoot, filter);
+        buildPatchFromDirectory(repRoot, builder, repRoot, filter);
     }
 
     private void buildPatchFromDirectory(File curDir, final PatchBuilder builder, final File repRoot, final FileFilter filter)
     	throws IOException
 	{
-/*
     	File[] files = curDir.listFiles(filter);
     	if (files == null)
     		return;
@@ -766,7 +773,6 @@ public class AccuRevVcsSupport extends ServerVcsSupport
 				}
 			}
 		}
- */
 	}
 
     @NotNull
@@ -775,44 +781,29 @@ public class AccuRevVcsSupport extends ServerVcsSupport
                              final VcsChangeInfo.ContentType contentType,
                              final VcsRoot vcsRoot) throws VcsException
     {
-    	System.out.println("[XX] getContent1");
-    	Loggers.VCS.info("[XX] getContent");
-        String version = contentType == VcsChangeInfo.ContentType.AFTER_CHANGE ? change.getAfterChangeRevisionNumber() : change.getBeforeChangeRevisionNumber();
+        String version = (contentType == VcsChangeInfo.ContentType.AFTER_CHANGE) 
+                       ? change.getAfterChangeRevisionNumber() 
+                       : change.getBeforeChangeRevisionNumber();
         return getContent(change.getRelativeFileName(), vcsRoot, version);
     }
 
     @NotNull
-    public byte[] getContent(final String filePath, final VcsRoot vcsRoot, final String version) throws VcsException
+    public byte[] getContent(final String filePath, final VcsRoot vcsRoot, final String version)
+        throws VcsException
     {
         Settings settings = createSettings(vcsRoot);
-        System.out.println("[XX] getContent2");
-    	Loggers.VCS.info("[XX] getContent2");
-        
-/*
-		RunProcess.setAccuRevExecutable(settings.getExecutablePath().getAbsolutePath());
-		AcSecurityProcess sec = new AcSecurityProcess();
-		sec.setSessionToken(new SessionToken(settings.getServerName() + ":" + settings.getServerPort(), "", settings.getUsername()));
-		String token = "";
-    	if (sec.getSecurityInfo().startsWith(sec.NotAuthenticated))
-        	token = sec.Login(settings.getUsername(), settings.getPassword());
+        AcCatProcess cmd = AcCatProcess.getInstance(settings);
 
-        AcCatProcess cmd = new AcCatProcess();
-        cmd.setSessionToken(new SessionToken(settings.getServerName() + ":" + settings.getServerPort(), token, settings.getUsername()));
-                
-    	String depotName = settings.getDepot();
+        String depotName = settings.getDepot();
         String streamNameVersion = version;
         String elementName = filePath;
         
         return cmd.getFileContentByFilePath(streamNameVersion, elementName, depotName);
-*/
-        return new byte[0];        
     }
 
     public VcsChange createChangeItem(XPath xPath, Element acChangeNode, String virtualVersion)
             throws XPathExpressionException
     {
-    	System.out.println("[XX] createChangeItem");
-    	
         Element oldVer = (Element) xPath.evaluate("Stream1", acChangeNode, XPathConstants.NODE);
         Element newVer = (Element) xPath.evaluate("Stream2", acChangeNode, XPathConstants.NODE);
 
@@ -824,7 +815,7 @@ public class AccuRevVcsSupport extends ServerVcsSupport
         }
 
         String filePath = verFullPath.substring(1); // strip the /./ from the beginning
-        Loggers.VCS.debug("Version = " + filePath);
+        Loggers.VCS.info("Version = " + filePath);
 
         String fileName = filePath;
         String relativeFileName = filePath;
@@ -859,17 +850,19 @@ public class AccuRevVcsSupport extends ServerVcsSupport
     public void collectStreamChanges(VcsRoot root, String depot, String watchStream, 
     		List<ModificationData> result, Document xmlChanges, 
     		String fromVersion, String currentVersion, 
-    		AcRunProcess run, XPath xPath)
+    		AcRunProcessExe run, XPath xPath)
         throws VcsException, XPathExpressionException
     {
-    	System.out.println("[XX] Collecting stream changes");
-    	Loggers.VCS.info("Collecting stream changes for " + watchStream + " from tx " + fromVersion + " to tx " + currentVersion);
+    	Loggers.VCS.info("[XX] collectStreamChanges:  stream '" + watchStream + "', from " + fromVersion + ", to " + currentVersion);
 
-        Vector<TransactionData> vec = run.getRevisionsBetween(depot, watchStream, fromVersion, currentVersion);
-    	
-/*
-
-        Loggers.VCS.debug("Number of transactions on " + watchStream + ": " + vec.size()); // Display the string.
+        //Vector<TransactionData> vec = run.getRevisionsBetween(depot, watchStream, fromVersion, currentVersion);
+    	// else
+        AcRunProcessExe.AcHistoryParser hist = run.getHistoryBetween(depot, watchStream, fromVersion, currentVersion);    	
+        @SuppressWarnings("unchecked")
+        Vector<TransactionData> vec = hist.getHistoryDataCollection();
+        
+        Loggers.VCS.info("[XX] Number of transactions on '" + watchStream + "': " + vec.size());
+        
         for (TransactionData tx : vec)
         {
             if (tx.getTranId().equals(fromVersion))
@@ -882,17 +875,21 @@ public class AccuRevVcsSupport extends ServerVcsSupport
             for (VersionData version : versions)
             {
                 String fullRealNum = version.getRealStreamNum() + "/" + version.getRealVersionNum();
-                Loggers.VCS.debug("ElementID: " + version.getVerEID() + ", Real version num:" +  fullRealNum);
-*/ 
+                //Loggers.VCS.debug("ElementID: " + version.getVerEID() + ", Real version num:" +  fullRealNum);
+
                 //String expression = "/AcResponse/Element/Change[*/@eid='" + version.getVerEID() + "' and @What!='eid']";
                 //NodeList nodeList = (NodeList)xPath.evaluate(expression, xmlChanges, XPathConstants.NODESET);  
 /*                
-                for ( int i = 0; i < nodeList.getLength( ); ++i )
+                for ( int i = 0; i < nodeList.getLength(); ++i )
                 {
                 	Element node = ( Element )nodeList.item( i );
-                
-                	if (node == null)
+                                	
+                	if (node == null) {
+                		Loggers.VCS.info("[XX] node is null");
                 		continue;
+                	}
+                	
+                	Loggers.VCS.info("[XX] found a node, " + version.getVerVirtualName());
                 	
                     Element oldVer = (Element) xPath.evaluate("Stream1", node, XPathConstants.NODE);
                     Element newVer = (Element) xPath.evaluate("Stream2", node, XPathConstants.NODE);
@@ -906,8 +903,40 @@ public class AccuRevVcsSupport extends ServerVcsSupport
                     
                     	break;
                     }
-                }
+                }                               
+  */
+                
+                String verVirtualNamed = StreamData.convertStreamVersion(version.getVerVirtual(), hist.getStreamCollection());
+                String verRealNamed = StreamData.convertStreamVersion(version.getVerReal(), hist.getStreamCollection());
+                                
+                Loggers.VCS.info("|ElementID: "+ version.getVerEID()); 
+                Loggers.VCS.info("|  Virtual: "+ version.getVerVirtual() +" \t'"+ verVirtualNamed +"'");
+                Loggers.VCS.info("|     Real: "+ version.getVerReal() +" \t'"+ verRealNamed +"'");
+                Loggers.VCS.info("|    IsDir: "+ version.getVerIsDir());
+                Loggers.VCS.info("|     Path: "+ version.getVerFullPath());
+                
+                Boolean isDir = version.getVerIsDir();
+                String filePath = version.getVerFullPath().substring(1); // strip the /./ from the beginning
+                String fileName = filePath;
+                String relativeFileName = filePath;
+                String afterNum = version.getVerVirtual();
+                
+                String beforeNum = null;//version.getVerAncestor();
+                if (beforeNum == null)
+                	beforeNum = run.getDirectAncestor(verVirtualNamed, version.getVerFullPath());
+                if (beforeNum.equals("0/0"))
+                	beforeNum = null;
+
+                VcsChangeInfo.Type changeType = isDir ? VcsChangeInfo.Type.DIRECTORY_CHANGED : VcsChangeInfo.Type.CHANGED;
+                
+                Loggers.VCS.info("| Ancestor: "+ beforeNum);
+                
+                Loggers.VCS.info("VcsChange: changeType="+changeType.toString()+" fileName="+fileName+" beforeNum="+(beforeNum != null ? beforeNum : "(null)")+" afterNum="+(afterNum != null ? afterNum : "(null)")+" isDir="+isDir);
+                
+                VcsChange change = new VcsChange(changeType, fileName, relativeFileName, beforeNum, afterNum);
+                changes.add(change);
             }
+            
             if (changes.size()!= 0)
             {
                 Date changeDate = new Date(Long.parseLong(tx.getTranTime()) * 1000L); // Transaction: time
@@ -915,22 +944,30 @@ public class AccuRevVcsSupport extends ServerVcsSupport
                 String user = tx.getTranUser();
                 String txVersion = currentVersion;  // DCN 05APR2011 We use the depot-wide high watermark to ensure that the workspace is populated to the same Transaction number as the Collect changes
                 String displayVersion = tx.getTranId();
+                
+                Loggers.VCS.info("Modification: changeDate="+changeDate+" user="+user+" txVersion="+txVersion+" displayVersion="+displayVersion+" description='"+description+"'");
+                
                 ModificationData mod = new ModificationData(changeDate, changes, description, user, root, txVersion, displayVersion);
                 result.add(mod);
             }
         }
-        NodeList inheritedVersionNodes = (NodeList) xPath.evaluate("/AcResponse/Element/Change[not(@VcsStatus) or @VcsStatus != 'Matched']", xmlChanges, XPathConstants.NODESET);
-        Loggers.VCS.debug("Number of changes left: " + inheritedVersionNodes.getLength()); // Display the string.
-
-        if (inheritedVersionNodes.getLength() != 0)
+        
+        //NodeList inheritedVersionNodes = (NodeList) xPath.evaluate("/AcResponse/Element/Change[not(@VcsStatus) or @VcsStatus != 'Matched']", xmlChanges, XPathConstants.NODESET);
+        //Loggers.VCS.info("Number of changes left: " + inheritedVersionNodes.getLength()); // Display the string.
+       
+        //if (inheritedVersionNodes.getLength() != 0)
         {
             String parentStream = run.getParentStreamName(depot, watchStream);
-            Loggers.VCS.debug("Parent stream: " + parentStream);
+            
+            Loggers.VCS.info("Parent stream: '" + parentStream + "'");
             if (parentStream != null)
             {
-                collectStreamChanges(root, depot, parentStream, result, xmlChanges, fromVersion, currentVersion, run, xPath);
+            	parentStream = parentStream.trim();
+            	if (parentStream.length() > 0)
+            	{
+            		collectStreamChanges(root, depot, parentStream, result, xmlChanges, fromVersion, currentVersion, run, xPath);
+            	}
             }
         }
-*/        
     }
 }
