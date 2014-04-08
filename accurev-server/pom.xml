@@ -45,7 +45,7 @@
     </dependency>
     <dependency>
     	<groupId>com.accurev.common</groupId>
-    	<artifactId>AccuRevCommon.jar</artifactId>
+    	<artifactId>AccuRevCommon</artifactId>
     	<version>4.5.4</version>
     	<scope>provided</scope>
     </dependency>
