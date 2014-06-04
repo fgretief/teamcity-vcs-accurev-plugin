@@ -924,7 +924,7 @@ public class AccuRevVcsSupport
                 String beforeNum = null;//version.getVerAncestor();
                 if (beforeNum == null)
                 	beforeNum = run.getDirectAncestor(verVirtualNamed, version.getVerFullPath());
-                if (beforeNum.equals("0/0"))
+                if (beforeNum != null && beforeNum.equals("0/0"))
                 	beforeNum = null;
 
                 VcsChangeInfo.Type changeType = isDir ? VcsChangeInfo.Type.DIRECTORY_CHANGED : VcsChangeInfo.Type.CHANGED;

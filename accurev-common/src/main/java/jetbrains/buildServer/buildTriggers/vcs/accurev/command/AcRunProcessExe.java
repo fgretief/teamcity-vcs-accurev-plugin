@@ -412,9 +412,9 @@ public class AcRunProcessExe extends RunProcess implements AcRunProcess
         }
     }
 
-    public String getDirectAncestor(String verId, String filePath)
-    	throws VcsException
-    {
+	public String getDirectAncestor(String verId, String filePath)
+		throws VcsException
+	{
 		String[] args = {
 				RunProcess.getAccuRevExecutable(),
 				"anc",
@@ -423,21 +423,25 @@ public class AcRunProcessExe extends RunProcess implements AcRunProcess
 				filePath,
 		};
 
-		String command = commandPrefix + "accurev anc -fx -v "+ verId +" "+ filePath;
+		String command = commandPrefix + "accurev anc -fx -v " + verId + " " + filePath;
 		printBuildMessage(command);
 
-        GenericXMLParser parser = new GenericXMLParser();
-        int returnCode = doExecute("accurev anc", args, parser);
+		GenericXMLParser parser = new GenericXMLParser();
+		int returnCode = doExecute("accurev anc", args, parser);
 		printResultMessages(returnCode);
-		
+
 		XMLTag acResponse = (XMLTag)parser.getTagList().get(0);
 		assert acResponse.getName().equals("acResponse");
 		
+		XMLTag message = acResponse.getTag("message");
+		if (message != null && "true".equals(message.getAttributeValue("error")))
+			return null; /* Ancestor not found */
+
 		XMLTag element = acResponse.getTag("element");
 		String streamId = element.getAttributeValue("stream");
 		String ancVerId = element.getAttributeValue("version");
-		return streamId +"/"+ ancVerId;		 
-    }	
+		return streamId +"/"+ ancVerId;
+	}
 
 	@SuppressWarnings("unchecked")
 	public List<XMLTag> getUpdateStreamInfo(String depot, String stream, String highTx, String lowTx)
@@ -779,7 +783,7 @@ public class AcRunProcessExe extends RunProcess implements AcRunProcess
 		
 		String cmdName = "accurev pop";
 		mLastCommand = args; // Need to do this manually as we are calling ThrowIfError directly
-		int returnCode = ThrowIfError(cmdName, exec(args, checkoutDir.getAbsolutePath()), null);		
+		int returnCode = ThrowIfError(cmdName, exec(args, checkoutDir.getAbsolutePath()), null);
 		
 		printResultMessages(returnCode);
 		checkReturnCode(cmdName, returnCode);
