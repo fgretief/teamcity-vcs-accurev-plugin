@@ -420,10 +420,11 @@ public class AcRunProcessExe extends RunProcess implements AcRunProcess
 				"anc",
 				"-fx",
 				"-v", verId,
+				"-1",
 				filePath,
 		};
 
-		String command = commandPrefix + "accurev anc -fx -v " + verId + " " + filePath;
+		String command = commandPrefix + "accurev anc -fx -v " + verId + " -1 " + filePath;
 		printBuildMessage(command);
 
 		GenericXMLParser parser = new GenericXMLParser();
