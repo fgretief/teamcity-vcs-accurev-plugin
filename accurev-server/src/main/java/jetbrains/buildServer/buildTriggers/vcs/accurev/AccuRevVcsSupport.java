@@ -903,12 +903,18 @@ public class AccuRevVcsSupport
                     
                     	break;
                     }
-                }                               
+                }
   */
-                
+
+                String ancVer = run.getDirectAncestor(watchStream, version.getVerFullPath());
+                if (ancVer == null) {
+                	// file not found condition, thus the file is filtered out.
+                	continue;
+                }
+
                 String verVirtualNamed = StreamData.convertStreamVersion(version.getVerVirtual(), hist.getStreamCollection());
                 String verRealNamed = StreamData.convertStreamVersion(version.getVerReal(), hist.getStreamCollection());
-                                
+
                 Loggers.VCS.info("|ElementID: "+ version.getVerEID()); 
                 Loggers.VCS.info("|  Virtual: "+ version.getVerVirtual() +" \t'"+ verVirtualNamed +"'");
                 Loggers.VCS.info("|     Real: "+ version.getVerReal() +" \t'"+ verRealNamed +"'");
@@ -923,7 +929,7 @@ public class AccuRevVcsSupport
                 
                 String beforeNum = null;//version.getVerAncestor();
                 if (beforeNum == null)
-                	beforeNum = run.getDirectAncestor(verVirtualNamed, version.getVerFullPath());
+                	beforeNum = run.getPredecessorBeforeTransaction(verVirtualNamed, version.getVerFullPath());
                 if (beforeNum != null && beforeNum.equals("0/0"))
                 	beforeNum = null;
 
@@ -937,7 +943,7 @@ public class AccuRevVcsSupport
                 changes.add(change);
             }
             
-            if (changes.size()!= 0)
+            if (changes.size() > 0)
             {
                 Date changeDate = new Date(Long.parseLong(tx.getTranTime()) * 1000L); // Transaction: time
                 String description = tx.getComment();

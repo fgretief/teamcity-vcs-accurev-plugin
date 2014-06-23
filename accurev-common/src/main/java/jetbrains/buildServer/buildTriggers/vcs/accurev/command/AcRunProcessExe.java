@@ -413,6 +413,41 @@ public class AcRunProcessExe extends RunProcess implements AcRunProcess
     }
 
 	public String getDirectAncestor(String verId, String filePath)
+			throws VcsException
+	{
+		String[] args = {
+				RunProcess.getAccuRevExecutable(),
+				"anc",
+				"-fx",
+				"-v", verId,
+				filePath,
+		};
+
+		// if file name contains spaces, add quotes
+		if (filePath.contains(" "))
+			filePath = '"' + filePath + '"';
+
+		String command = commandPrefix + "accurev anc -fx -v " + verId + " " + filePath;
+		printBuildMessage(command);
+
+		GenericXMLParser parser = new GenericXMLParser();
+		int returnCode = doExecute("accurev anc", args, parser);
+		printResultMessages(returnCode);
+
+		XMLTag acResponse = (XMLTag)parser.getTagList().get(0);
+		assert acResponse.getName().equals("acResponse");
+
+		XMLTag message = acResponse.getTag("message");
+		if (message != null && "true".equals(message.getAttributeValue("error")))
+			return null; /* Ancestor not found */
+
+		XMLTag element = acResponse.getTag("element");
+		String streamId = element.getAttributeValue("stream");
+		String ancVerId = element.getAttributeValue("version");
+		return streamId +"/"+ ancVerId;
+	}
+
+	public String getPredecessorBeforeTransaction(String verId, String filePath)
 		throws VcsException
 	{
 		String[] args = {
@@ -423,6 +458,10 @@ public class AcRunProcessExe extends RunProcess implements AcRunProcess
 				"-1",
 				filePath,
 		};
+
+		// if file name contains spaces, add quotes
+		if (filePath.contains(" "))
+			filePath = '"' + filePath + '"';
 
 		String command = commandPrefix + "accurev anc -fx -v " + verId + " -1 " + filePath;
 		printBuildMessage(command);
